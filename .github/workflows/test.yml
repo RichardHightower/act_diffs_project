@@ -30,7 +30,14 @@ jobs:
 
     - name: Debug
       id: debug
-      run: echo "Got this far!!!! ${{ steps.get_version.outputs.VERSION }} ${{ steps.get_repo_name.outputs.REPO_NAME }}"
+      run: |
+        echo "Got this far!!!! ${{ steps.get_version.outputs.VERSION }} ${{ steps.get_repo_name.outputs.REPO_NAME }}"
+        echo "Repository: ${{ github.repository }}"
+        echo "Version: ${{ steps.get_version.outputs.VERSION }}"
+        echo "Full image name: ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}/diffs_project:${{ steps.get_version.outputs.VERSION }}"
+
+    - name: List available Docker images
+      run: docker images
 
     - name: Pull Docker container
       run: |
