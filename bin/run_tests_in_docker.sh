@@ -17,7 +17,7 @@ else
 fi
 
 # Set variables
-IMAGE_NAME="diffs_project"
+IMAGE_NAME="act_diffs_project"
 GITHUB_USERNAME="richardhightower"  # Change this to your GitHub username
 
 # Full image name

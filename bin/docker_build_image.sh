@@ -9,7 +9,7 @@ fi
 VERSION=$(cat version.txt)
 
 # Set variables
-IMAGE_NAME="diffs_project"
+IMAGE_NAME="act_diffs_project"
 GITREPO_USERNAME="richardhightower"  # Change this to your GitHub username
 
 # Build the Docker image

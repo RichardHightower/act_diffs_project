@@ -31,7 +31,7 @@ jobs:
     - name: Get Image SHA
       id: get_image_sha
       run: |
-        SHA=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}/diffs_project:${{ steps.get_version.outputs.VERSION }} | cut -d'@' -f2)
+        SHA=$(docker inspect --format='{{index .RepoDigests 0}}' ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }} | cut -d'@' -f2)
         echo "SHA=$SHA" >> $GITHUB_OUTPUT
 
     - name: Debug
@@ -41,15 +41,15 @@ jobs:
         echo "Repository: ${{ github.repository }}"
         echo "Version: ${{ steps.get_version.outputs.VERSION }}"
         echo "Image SHA: ${{ steps.get_image_sha.outputs.SHA }}"
-        echo "Full image name: ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}/diffs_project@${{ steps.get_image_sha.outputs.SHA }}"
+        echo "Full image name: ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}@${{ steps.get_image_sha.outputs.SHA }}"
 
     - name: List available Docker images
       run: docker images
 
     - name: Pull Docker container
       run: |
-        docker pull ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}/diffs_project@${{ steps.get_image_sha.outputs.SHA }}
+        docker pull ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}@${{ steps.get_image_sha.outputs.SHA }}
 
     - name: Run tests in Docker container
       run: |
-        docker run --rm ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}/diffs_project@${{ steps.get_image_sha.outputs.SHA }} pytest tests/
+        docker run --rm ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}@${{ steps.get_image_sha.outputs.SHA }} pytest tests/
