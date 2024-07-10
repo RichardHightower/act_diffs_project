@@ -404,3 +404,471 @@ Using act to run GitHub Actions locally can significantly streamline your develo
 This approach can be scaled to more complex projects and workflows, making your GitHub Actions development process smoother and more efficient. Remember to check the `act` documentation for more advanced usage and options to further customize your local GitHub Actions experience.
 
 By mastering the use of `act`, you'll be able to develop and test your GitHub Actions workflows with greater confidence and efficiency, ultimately leading to more robust and reliable automation for your projects.
+
+# Working with Docker container
+
+Let’s say that your project has a lot of dependencies and it takes a while for your github action workflows to run. To speed things up you decide to put a lot of the dependencies in a base docker image that is stored in the GitHub Container Registry. 
+
+Here are the high-level steps to create a Docker image for your GitHub Actions workflow, store it in GitHub Container Registry ([ghcr.io](http://ghcr.io/)), and update your workflow to use this image:
+
+1. Create a Dockerfile
+2. Build the Docker image locally
+3. Test the Docker image locally
+4. Set up GitHub Container Registry ([ghcr.io](http://ghcr.io/))
+5. Push the Docker image to [ghcr.io](http://ghcr.io/)
+6. Update the GitHub Actions workflow to use the custom image
+7. Test the updated GitHub Actions workflow
+
+Now, let's break down each step:
+
+1. Create a Dockerfile:
+    - Create a file named `Dockerfile` in your project root
+    - Base it on a Python image
+    - Copy requirements.txt and install dependencies
+2. Build the Docker image locally:
+    - Use `docker build` command to create the image
+3. Test the Docker image locally:
+    - Run the container
+    - Execute tests inside the container
+4. Set up GitHub Container Registry:
+    - Create a Personal Access Token (PAT) with appropriate permissions
+    - Log in to [ghcr.io](http://ghcr.io/) using the PAT
+5. Push the Docker image to [ghcr.io](http://ghcr.io/):
+    - Tag the image with the [ghcr.io](http://ghcr.io/) repository
+    - Push the image to [ghcr.io](http://ghcr.io/)
+6. Update the GitHub Actions workflow:
+    - Modify the workflow YAML to use the custom Docker image
+    - Add steps to log in to [ghcr.io](http://ghcr.io/) and pull the image
+7. Test the updated GitHub Actions workflow:
+    - Push changes to GitHub
+    - Monitor the Actions tab to ensure the workflow runs successfully with the new image
+
+This approach will create a custom Docker image with your dependencies pre-installed, which should significantly speed up your GitHub Actions workflow. The image will be stored in GitHub Container Registry, making it easily accessible for your GitHub Actions.
+
+## Create a Dockerfile
+
+Let's create a Dockerfile for your project. We'll use Python 3.12 as the base image to match your current GitHub Actions workflow. Here's a Dockerfile that should work for your project:
+
+```
+# Use Python 3.12 slim image as the base
+FROM python:3.12-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements file into the container
+COPY requirements.txt .
+
+# Install any needed packages specified in requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the rest of the application's code
+COPY . .
+
+# Set the command to run pytest
+CMD ["pytest", "tests/"]
+
+```
+
+This Dockerfile does the following:
+
+1. Uses the official Python 3.12 slim image as the base. The slim version is smaller and typically sufficient for most Python applications.
+2. Sets the working directory in the container to `/app`.
+3. Copies the `requirements.txt` file into the container.
+4. Installs the Python dependencies listed in `requirements.txt`.
+5. Copies the rest of your application code into the container.
+6. Sets the default command to run pytest on the tests directory.
+
+To create this Dockerfile:
+
+1. Open a text editor in your project root directory.
+2. Copy the above content into the editor.
+3. Save the file as `Dockerfile` (no file extension) in your project root.
+
+This Dockerfile assumes that your `requirements.txt` file is in the project root directory. If it's located elsewhere, you'll need to adjust the `COPY` command for `requirements.txt` accordingly.
+
+With this Dockerfile, you're ready to build a Docker image that includes all your project dependencies and is set up to run your tests. This image can be used both locally and in your GitHub Actions workflow.
+
+## Build the Docker image locally
+
+Let’s build the image and read the version from a `version.txt` file. Here's the build script stored in `bin/build_docker_image.sh`:
+
+```bash
+#!/bin/bash
+
+# Read version from version.txt
+if [ ! -f version.txt ]; then
+    echo "version.txt not found. Please create this file with the current version number."
+    exit 1
+fi
+
+VERSION=$(cat version.txt)
+
+# Set variables
+IMAGE_NAME="act_diffs_project"
+GITREPO_USERNAME="richardhightower"  # Change this to your GitHub username
+PLATFORM="linux/amd64"
+
+# Build the Docker image
+echo "Building Docker image version $VERSION..."
+
+# Tag the image for GitHub Container Registry
+docker build --platform $PLATFORM -t ghcr.io/$GITREPO_USERNAME/$IMAGE_NAME:$VERSION -t ghcr.io/$GITREPO_USERNAME/$IMAGE_NAME:latest --push .
+
+echo "Docker image built and pushed as:"
+echo "ghcr.io/$GITREPO_USERNAME/$IMAGE_NAME:$VERSION"
+echo "ghcr.io/$GITREPO_USERNAME/$IMAGE_NAME:latest"
+
+echo "Done!"
+```
+
+To use this script:
+
+1. Create a file named `version.txt` in your project root and add your version number to it (e.g., `1.0.0`).
+2. Save the script as `build_docker_image.sh` in your project root.
+3. Make it executable:
+    
+    ```bash
+    chmod +x bin/build_docker_image.sh
+    
+    ```
+    
+4. Run it:
+    
+    ```bash
+    ./bin/build_docker_image.sh
+    
+    ```
+    
+
+This script does the following:
+
+1. Reads the version number from `version.txt`.
+2. Sets up variables for the image name and your GitHub username.
+3. Builds the Docker image with the version from `version.txt` and 'latest' tag.
+4. Tags the image for GitHub Container Registry ([ghcr.io](http://ghcr.io/)).
+
+Before using this script, make sure to:
+
+- Replace `your_github_username` with your actual GitHub username.
+- Create a `version.txt` file in your project root with your current version number.
+
+This script provides a simple way to build and tag your Docker image with proper versioning, reading the version from a file. It creates both a version-specific tag and a 'latest' tag, which is a common practice in Docker image management.
+
+## Test the Docker image locally
+
+Let’s create a bash script to run the Docker container and execute tests inside it. We'll name this script `bin/run_tests_in_docker.sh`. This script will use the version from the command line if provided, or read it from `version.txt` if not.
+
+Here's the content of the script:
+
+```bash
+#!/bin/bash
+
+# Function to read version from version.txt
+read_version_from_file() {
+    if [ ! -f version.txt ]; then
+        echo "version.txt not found. Please create this file with the current version number."
+        exit 1
+    fi
+    cat version.txt
+}
+
+# Check if version is provided as an argument, otherwise read from file
+if [ -z "$1" ]; then
+    VERSION=$(read_version_from_file)
+else
+    VERSION=$1
+fi
+
+# Set variables
+IMAGE_NAME="diffs_project"
+GITHUB_USERNAME="revelfire"  # Change this to your GitHub username
+
+# Full image name
+FULL_IMAGE_NAME="ghcr.io/$GITHUB_USERNAME/$IMAGE_NAME:$VERSION"
+
+echo "Running tests for $FULL_IMAGE_NAME"
+
+# Run the container and execute tests
+docker run --rm $FULL_IMAGE_NAME pytest tests/
+
+# Check the exit code of the last command
+if [ $? -eq 0 ]; then
+    echo "Tests passed successfully!"
+else
+    echo "Tests failed. Please check the output above for details."
+fi
+
+```
+
+To use this script:
+
+1. Save it as `run_tests_in_docker.sh` in your project root.
+2. Make it executable:
+    
+    ```bash
+    chmod +x bin/run_tests_in_docker.sh
+    
+    ```
+    
+3. Run it with or without a version number:
+    
+    ```bash
+    ./bin/run_tests_in_docker.sh
+    
+    ```
+    
+    or
+    
+    ```bash
+    ./bin/run_tests_in_docker.sh 1.0.1
+    
+    ```
+    
+
+This script does the following:
+
+1. Defines a function to read the version from `version.txt` if it exists.
+2. Checks if a version is provided as an argument. If not, it reads from `version.txt`.
+3. Sets up variables for the image name and your GitHub username.
+4. Constructs the full image name using the GitHub Container Registry format.
+5. Runs the Docker container, executing the pytest command inside it.
+6. Checks the exit code of the test run and prints a success or failure message.
+
+Before using this script, make sure to:
+
+- Replace `revelfire` with your actual GitHub username.
+- Ensure that `version.txt` exists in your project root if you plan to use it.
+- Make sure you've built the Docker image using the `build_docker_image.sh` script we created earlier.
+
+This script allows you to easily run your tests inside the Docker container, ensuring that the tests are executed in an environment that matches your production setup. It's flexible, allowing you to specify a version or use the one from `version.txt`, making it easy to test different versions of your application.
+
+## Set up GitHub Container Registry
+
+Let’s go through the process of setting up GitHub Container Registry ([ghcr.io](http://ghcr.io/)) and logging in using a Personal Access Token (PAT).
+
+1. Create a Personal Access Token (PAT):
+    
+    a. Go to your GitHub account settings.
+    b. Click on "Developer settings" in the left sidebar.
+    c. Click on "Personal access tokens" (classic).
+    d. Click "Generate new token" (classic).
+    e. Give your token a descriptive note (e.g., "GHCR Access").
+    f. Select the following scopes:
+    
+    - `repo` (Full control of private repositories)
+    - `write:packages` (Upload packages to GitHub Package Registry)
+    - `delete:packages` (Delete packages from GitHub Package Registry)
+    - `read:packages` (Download packages from GitHub Package Registry)
+    g. Click "Generate token".
+    h. Copy the generated token immediately and store it securely. You won't be able to see it again!
+2. Log in to [ghcr.io](http://ghcr.io/) using the PAT:
+    
+    Now that you have your PAT, you can use it to log in to [ghcr.io](http://ghcr.io/). You can do this in two ways:
+    
+    a. Using Docker CLI:
+    
+    Run the following command in your terminal:
+    
+    ```bash
+    echo YOUR_PAT | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin
+    
+    ```
+    
+    Replace `YOUR_PAT` with the token you just generated and `YOUR_GITHUB_USERNAME` with your GitHub username.
+    
+    b. Using a credentials file:
+    
+    Alternatively, you can create a Docker config file with your credentials:
+    
+    ```bash
+    mkdir -p ~/.docker
+    echo '{
+      "auths": {
+        "ghcr.io": {
+          "auth": "'$(echo -n YOUR_GITHUB_USERNAME:YOUR_PAT | base64)'"
+        }
+      }
+    }' > ~/.docker/config.json
+    
+    ```
+    
+    Again, replace `YOUR_GITHUB_USERNAME` and `YOUR_PAT` with your actual GitHub username and the token you generated.
+    
+    Add your PAT as a secret key to the repo project under your repo on the GitHub site under Settings→Secrets and variables under the name `GHR_HASH`.
+    
+3. Verify the login:
+    
+    You can verify that you've successfully logged in by running:
+    
+    ```bash
+    docker login ghcr.io
+    
+    ```
+    
+    If it says "Login Succeeded", you're all set!
+    
+
+## Push the Docker image to ghrc.io
+
+After building your Docker image locally, the next step is to push it to GitHub Container Registry ([ghcr.io](http://ghcr.io/)). This allows you to store your image securely and make it easily accessible for your GitHub Actions workflows or other team members.
+
+### Creating the Push Script
+
+We'll create a script called `bin/push_docker_ghcr.sh` to automate the process of tagging and pushing our image. Here's the content of the script:
+
+```bash
+#!/bin/bash
+
+# Read version from version.txt
+if [ ! -f version.txt ]; then
+    echo "version.txt not found. Please create this file with the current version number."
+    exit 1
+fi
+
+VERSION=$(cat version.txt)
+
+# Set variables
+IMAGE_NAME="act_diffs_project"
+GITHUB_USERNAME="richardhightower"  # Change this to your GitHub username
+
+# Full image name for ghcr.io
+GHCR_IMAGE_NAME="ghcr.io/$GITHUB_USERNAME/$IMAGE_NAME"
+
+# Tag the image for GitHub Container Registry
+echo "Tagging image for GitHub Container Registry..."
+docker tag $IMAGE_NAME:$VERSION $GHCR_IMAGE_NAME:$VERSION
+docker tag $IMAGE_NAME:$VERSION $GHCR_IMAGE_NAME:latest
+
+# Push the image to GitHub Container Registry
+echo "Pushing image to GitHub Container Registry..."
+docker push $GHCR_IMAGE_NAME:$VERSION
+docker push $GHCR_IMAGE_NAME:latest
+
+echo "Image successfully pushed to GitHub Container Registry:"
+echo "$GHCR_IMAGE_NAME:$VERSION"
+echo "$GHCR_IMAGE_NAME:latest"
+
+```
+
+### Using the Push Script
+
+To use this script:
+
+1. Save it as `push_docker_ghcr.sh` in your project root.
+2. Make it executable:
+    
+    ```bash
+    chmod +x bin/push_docker_ghcr.sh
+    
+    ```
+    
+3. Ensure you're logged in to GitHub Container Registry (as described in the previous section).
+4. Run the script:
+    
+    ```bash
+    ./bin/push_docker_ghcr.sh
+    
+    ```
+    
+
+### What the Script Does
+
+1. **Read Version**: It reads the version number from `version.txt` in your project root.
+2. **Set Variables**: It sets up variables for your image name and GitHub username.
+3. **Tag Images**: It tags your local image with the [ghcr.io](http://ghcr.io/) repository name, using both the specific version and 'latest' tags.
+4. **Push Images**: It pushes both the version-specific and 'latest' tagged images to GitHub Container Registry.
+
+### Important Notes
+
+- Make sure to replace `revelfire` in the script with your actual GitHub username.
+- Ensure that you have built the Docker image locally before running this script.
+- The script assumes that your local image is named `diffs_project` and tagged with the version number from `version.txt`.
+
+By using this script, you can easily push your Docker image to GitHub Container Registry whenever you're ready to release a new version. This streamlines your workflow and ensures that your latest image is always available for your GitHub Actions or other deployment processes.
+
+## Update the GitHub Actions workflow:
+
+- Modify the workflow YAML to use the custom Docker image
+- Add steps to log in to [ghcr.io](http://ghcr.io/) and pull the image
+
+Updated workflow file .github/workflows/test.yml 
+
+```yaml
+name: CI
+
+on: [push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Log in to GitHub Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ secrets.GHR_HASH }}
+
+    - name: Get version
+      id: get_version
+      run: echo "VERSION=$(cat version.txt)" >> $GITHUB_OUTPUT
+
+    - name: Get Repo Name
+      id: get_repo_name
+      run: echo "REPO_NAME=$(echo "${{ github.repository }}" | awk '{print tolower($0)}')" >> $GITHUB_OUTPUT
+
+    - name: Debug
+      id: debug
+      run: |
+        echo "Got this far!!!! ${{ steps.get_version.outputs.VERSION }} ${{ steps.get_repo_name.outputs.REPO_NAME }}"
+        echo "Repository: ${{ github.repository }}"
+        echo "Version: ${{ steps.get_version.outputs.VERSION }}"
+        echo "Full image name: ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }}"
+
+    - name: Pull Docker container
+      run: |
+        docker pull --platform linux/amd64 ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }}
+
+    - name: Run tests in Docker container
+      run: |
+        docker run --rm --platform linux/amd64 ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }} pytest tests/
+
+```
+
+This GitHub Actions workflow, named "CI" (Continuous Integration), is triggered on every push to the repository. Here's a breakdown of what it does:
+
+1. Sets up the job:
+    - Runs on the latest Ubuntu runner
+    - Sets permissions for contents (read) and packages (read)
+2. Checks out the repository:
+    - Uses actions/checkout@v4 to clone the repository into the runner
+3. Logs in to GitHub Container Registry (GHCR):
+    - Uses docker/login-action@v3
+    - Authenticates using the GitHub actor (current user) and a secret GHR_HASH
+4. Gets the version:
+    - Reads the version from a file named version.txt
+    - Stores it as an output variable named VERSION
+5. Gets the repository name:
+    - Extracts the repository name from github.repository
+    - Converts it to lowercase
+    - Stores it as an output variable named REPO_NAME
+6. Debugging step:
+    - Prints out version, repository name, and full image name for verification
+7. Pulls the Docker container:
+    - Uses docker pull to download the image from GHCR
+    - Specifies the platform as linux/amd64
+    - Uses the version and repository name obtained earlier
+8. Runs tests in the Docker container:
+    - Uses docker run to start a container from the pulled image
+    - Specifies the platform as linux/amd64
+    - Runs pytest tests/ inside the container
+
+This workflow essentially sets up the environment, pulls a specific version of a Docker image from GitHub Container Registry, and then runs tests inside that Docker container. It's designed to ensure that the tests are run in a consistent environment (the Docker container) regardless of where the workflow is executed.
