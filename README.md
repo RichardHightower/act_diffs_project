@@ -405,7 +405,7 @@ This approach can be scaled to more complex projects and workflows, making your 
 
 By mastering the use of `act`, you'll be able to develop and test your GitHub Actions workflows with greater confidence and efficiency, ultimately leading to more robust and reliable automation for your projects.
 
-# Working with Docker container
+# Using a base image to speed up downloads of dependencies
 
 Let’s say that your project has a lot of dependencies and it takes a while for your github action workflows to run. To speed things up you decide to put a lot of the dependencies in a base docker image that is stored in the GitHub Container Registry. 
 
