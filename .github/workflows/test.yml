@@ -41,7 +41,7 @@ jobs:
         echo "Repository: ${{ github.repository }}"
         echo "Version: ${{ steps.get_version.outputs.VERSION }}"
         echo "Image SHA: ${{ steps.get_image_sha.outputs.SHA }}"
-        echo "Full image name: ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}@${{ steps.get_image_sha.outputs.SHA }}"
+        echo "Full image name: ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }}@${{ steps.get_image_sha.outputs.SHA }}"
 
     - name: List available Docker images
       run: docker images
