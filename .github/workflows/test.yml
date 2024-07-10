@@ -24,7 +24,19 @@ jobs:
       id: get_version
       run: echo "VERSION=$(cat version.txt)" >> $GITHUB_OUTPUT
 
+    - name: Get Repo Name
+      id: get_repo_name
+      run: echo "REPO_NAME=$(echo "${{ github.repository }}" | awk '{print tolower($0)}')" >> $GITHUB_OUTPUT
+
+    - name: Debug
+      id: debug
+      run: echo "Got this far!!!! ${{ steps.get_version.outputs.VERSION }} ${{ steps.get_repo_name.outputs.REPO_NAME }}"
+
+    - name: Pull Docker container
+      run: |
+        docker pull ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}/diffs_project:${{ steps.get_version.outputs.VERSION }}
+        
+
     - name: Run tests in Docker container
       run: |
-        docker pull ghcr.io/${{ github.repository }}/diffs_project:${{ steps.get_version.outputs.VERSION }}
-        docker run --rm ghcr.io/${{ github.repository }}/diffs_project:${{ steps.get_version.outputs.VERSION }} pytest tests/
+        docker run --rm ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}/diffs_project:${{ steps.get_version.outputs.VERSION }} pytest tests/        
