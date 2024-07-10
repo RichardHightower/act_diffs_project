@@ -48,8 +48,8 @@ jobs:
 
     - name: Pull Docker container
       run: |
-        docker pull ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}
+        docker pull ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }}
 
     - name: Run tests in Docker container
       run: |
-        docker run --rm ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }} pytest tests/
+        docker run --rm ghcr.io/${{ steps.get_repo_name.outputs.REPO_NAME }}:${{ steps.get_version.outputs.VERSION }} pytest tests/
